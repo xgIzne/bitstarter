@@ -21,12 +21,14 @@ References:
    - https://developer.mozilla.org/en-US/docs/JSON
    - https://developer.mozilla.org/en-US/docs/JSON#JSON_in_Firefox_2
 */
-
+var util = require('util');
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
+var rest = require('restler');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
+var OUTPUTFILE_DEFAULT = "checked.html";
 
 var assertFileExists = function(infile) {
     var instr = infile.toString();
@@ -63,14 +65,37 @@ var clone = function(fn) {
     return fn.bind({});
 };
 
+function processFile(htmlfile, checksfile) {
+    var checkJson = checkHtmlFile(htmlfile, checksfile);
+    var outJson = JSON.stringify(checkJson, null, 4);
+    console.log(outJson);
+}
+
 if (require.main == module) {
+
     program
 	.option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
 	.option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+	.option('-u, --url <url>', 'URL to be checked')
 	.parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
-    var outJson = JSON.stringify(checkJson, null, 4);
-    console.log(outJson);
+
+    if (program.url) {
+	rest.get(program.url).on('complete', function(result, response) {
+	    if (result instanceof Error) {
+		console.error('Error: ' + util.format(response.message));
+		process.exit(1);
+	    } else {
+		console.error("Wrote %s to %s", program.url, OUTPUTFILE_DEFAULT);
+		fs.writeFileSync(OUTPUTFILE_DEFAULT, result);
+		processFile(OUTPUTFILE_DEFAULT, program.checks);
+	    }
+	});
+    } else if (program.file) {
+	processFile(program.file, program.checks);
+    } else {
+	console.log('No input file, exiting.');
+	process.exit(1);
+    }
 } else {
     exports.checkHtmlFile = checkHtmlFile;
 }
